@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Log;
 use Webkul\Core\Eloquent\Repository;
 use Webkul\Sales\Generators\OrderSequencer;
 use Webkul\Sales\Models\Order as OrderModel;
+use Webkul\Checkout\Facades\Cart;
+use Webkul\Payment\Models\OrderPayment;
 
 class OrderRepository extends Repository
 {
@@ -43,53 +45,60 @@ class OrderRepository extends Repository
         DB::beginTransaction();
 
         try {
+        // return $data;
+
             Event::dispatch('checkout.order.save.before', [$data]);
 
             $data['status'] = 'pending';
 
             $order = $this->model->create(array_merge($data, ['increment_id' => $this->generateIncrementId()]));
 
-            $order->payment()->create($data['payment']);
+            // DB::table('orders')->updateOrInsert(
+            //     ['order_id' => $order->id],  // condition to find existing
+            //     [
+            //         'customer_email' => $data->method,
+            //         'customer_first_name' => $data->method_title,
+            //         'customer_last_name' => $data->dd, // or serialize additional data if any
+            //         'created_at' => now(),
+            //         'updated_at' => now(),
+            //     ]
+            //     );
 
-            if (isset($data['shipping_address'])) {
-                $order->addresses()->create($data['shipping_address']);
+            $data = Cart::getCart($data['id']);
+            // return $order;
+
+            $cartPayment = DB::table('cart_payment')->where('cart_id', $data['id'])->first();
+
+            // return $order->id;
+
+            if ($cartPayment) {
+                DB::table('order_payment')->updateOrInsert(
+                ['order_id' => $order->id],  // condition to find existing
+                [
+                    'method' => $cartPayment->method,
+                    'method_title' => $cartPayment->method_title,
+                    'additional' => null, // or serialize additional data if any
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]
+            );
             }
-
-            $order->addresses()->create($data['billing_address']);
-
-            foreach ($data['items'] as $item) {
-                Event::dispatch('checkout.order.orderitem.save.before', $item);
-
-                $orderItem = $this->orderItemRepository->create(array_merge($item, ['order_id' => $order->id]));
-
-                if (! empty($item['children'])) {
-                    foreach ($item['children'] as $child) {
-                        $this->orderItemRepository->create(array_merge($child, ['order_id' => $order->id, 'parent_id' => $orderItem->id]));
-                    }
-                }
-
-                $this->orderItemRepository->manageInventory($orderItem);
-
-                $this->downloadableLinkPurchasedRepository->saveLinks($orderItem, 'available');
-
-                Event::dispatch('checkout.order.orderitem.save.after', $orderItem);
-            }
-
-            Event::dispatch('checkout.order.save.after', $order);
+        //    return $order;
+            // Event::dispatch('checkout.order.save.after', $order);
         } catch (\Exception $e) {
-            /* rolling back first */
+        //     /* rolling back first */
             DB::rollBack();
 
-            /* storing log for errors */
-            Log::error(
-                'OrderRepository:createOrderIfNotThenRetry: '.$e->getMessage(),
-                ['data' => $data]
-            );
+        //     /* storing log for errors */
+        //     Log::error(
+        //         'OrderRepository:createOrderIfNotThenRetry: '.$e->getMessage(),
+        //         ['data' => $data]
+        //     );
 
-            /* recalling */
-            $this->createOrderIfNotThenRetry($data);
+        //     /* recalling */
+        //     // $this->createOrderIfNotThenRetry($data);
         } finally {
-            /* commit in each case */
+        //     /* commit in each case */
             DB::commit();
         }
 

@@ -11,7 +11,7 @@
 |
 */
 
-Route::prefix('custom-apis')->group(function () {
+Route::prefix('custom-apis')->middleware('web')->group(function () {
     Route::get('/categories', [App\Http\Controllers\Api\CategoryController::class, 'index']);
     Route::get('/products', [App\Http\Controllers\Api\ProductController::class, 'index']);
     Route::post('/cart', [App\Http\Controllers\Api\CartController::class, 'addToCart']);

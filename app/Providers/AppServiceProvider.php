@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\ParallelTesting;
 use Illuminate\Support\Facades\Request;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
+use Webkul\Sales\Generators\OrderSequencer;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -40,5 +41,17 @@ class AppServiceProvider extends ServiceProvider
         } else {
             \Debugbar::disable();
         }
+// Temporary override for OrderSequencer to prevent infinite loop
+        $this->app->bind(OrderSequencer::class, function ($app) {
+            return new class extends OrderSequencer {
+                public function getLastId()
+                {
+                    return 0; // Return a dummy ID to avoid DB calls and recursion
+                }
+            };
+        });
+        
     }
 }
+
+
